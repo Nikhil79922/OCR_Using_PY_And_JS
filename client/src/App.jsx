@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
 
 function App() {
   const [file, setFile] = useState(null);
   const [extractedData, setExtractedData] = useState(null);
-  const [copySuccess, setCopySuccess] = useState(false);  // For copy success message
+  const [containerHeight, setContainerHeight] = useState('0px');
+  const [copySuccess, setCopySuccess] = useState(false); // Copy success message state
+  const contentRef = useRef(null); // Ref for extracted data content
 
   // Handle file drop
   const onDrop = (acceptedFiles) => {
@@ -37,6 +39,34 @@ function App() {
     multiple: false,
   });
 
+  // Update container height when extracted data changes
+  useEffect(() => {
+    const adjustHeight = () => {
+      if (contentRef.current) {
+        const height = contentRef.current.scrollHeight;
+        // Adding extra space to ensure all content fits
+        setContainerHeight(`${height + 120}px`); 
+      } else {
+        setContainerHeight('0px');
+      }
+    };
+  
+    // Using a small delay to ensure rendering is complete
+    const timeout = setTimeout(adjustHeight, 50);
+  
+    return () => clearTimeout(timeout);
+  }, [extractedData]);
+
+
+  // Copy extracted data to clipboard
+  const copyToClipboard = () => {
+    const dataToCopy = JSON.stringify(extractedData, null, 2); // Format data as readable JSON
+    navigator.clipboard.writeText(dataToCopy).then(() => {
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000); // Reset success message after 2 seconds
+    });
+  };
+
   // Function to display extracted data
   const renderExtractedData = () => {
     if (!extractedData) {
@@ -44,7 +74,7 @@ function App() {
     }
 
     return (
-      <div style={{ padding: '16px', color: '#ccc' }}>
+      <div ref={contentRef}>
         {Object.keys(extractedData).map((key) => (
           <div key={key} style={{ marginBottom: '12px' }}>
             <strong style={{ color: '#ff5722' }}>{key}:</strong>
@@ -56,35 +86,29 @@ function App() {
           style={{
             backgroundColor: '#ff5722',
             color: '#fff',
-            padding: '5px 10px',
+            padding: '8px 12px',
             border: 'none',
             borderRadius: '8px',
             cursor: 'pointer',
             marginTop: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
           }}
         >
           <lord-icon
-    src="https://cdn.lordicon.com/rwtswsap.json"
-    trigger="click"
-    style={{width:"20px",height:"20px"}}>
-</lord-icon>
+            src="https://cdn.lordicon.com/rwtswsap.json"
+            trigger="click"
+            style={{ width: '20px', height: '20px' }}
+          />
         </button>
         {copySuccess && <p style={{ color: '#4caf50', marginTop: '10px' }}>Text Copied!</p>}
       </div>
     );
   };
 
-  // Copy extracted data to clipboard
-  const copyToClipboard = () => {
-    const dataToCopy = JSON.stringify(extractedData, null, 2);  // Stringify the data to get readable format
-    navigator.clipboard.writeText(dataToCopy).then(() => {
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000); // Reset the success message after 2 seconds
-    });
-  };
-
   return (
-    <div 
+    <div
       className="min-h-screen bg-cover bg-center flex items-center justify-center"
       style={{
         backgroundImage: 'url("https://your-image-url.com/metal-background.jpg")', // Replace with your background image URL
@@ -92,7 +116,7 @@ function App() {
         backgroundSize: 'cover',
       }}
     >
-      <div 
+      <div
         className="flex gap-8 items-start"
         style={{
           display: 'flex',
@@ -105,7 +129,7 @@ function App() {
         }}
       >
         {/* Upload Box */}
-        <div 
+        <div
           className="bg-gray-800 rounded-lg shadow-lg p-6"
           style={{
             width: '100%',
@@ -117,7 +141,7 @@ function App() {
             boxShadow: '0 12px 32px rgba(0, 0, 0, 0.3)',
           }}
         >
-          <h1 
+          <h1
             className="text-center font-bold mb-6 text-gray-200"
             style={{ fontSize: '24px', marginBottom: '16px' }}
           >
@@ -139,8 +163,8 @@ function App() {
               transition: 'transform 0.3s ease-in-out',
               color: '#ccc',
             }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
           >
             <input {...getInputProps()} />
             {!file ? (
@@ -171,15 +195,15 @@ function App() {
               boxShadow: '0 4px 10px rgba(0, 0, 0, 0.4)',
               transition: 'background-color 0.3s ease, transform 0.2s',
             }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
           >
             Upload & Process
           </button>
         </div>
 
         {/* Extracted Data Box */}
-        <div 
+        <div
           className="bg-gray-800 rounded-lg shadow-lg p-6"
           style={{
             width: '100%',
@@ -189,9 +213,12 @@ function App() {
             border: '2px solid #444',
             background: 'linear-gradient(145deg, #2a2a2a, #1f1f1f)',
             boxShadow: '0 12px 32px rgba(0, 0, 0, 0.3)',
+            overflow: 'hidden',
+            height: extractedData ? containerHeight : '130px', // 150px height when no data
+            transition: 'height 1.5s ease', // Smooth height transition
           }}
         >
-          <h1 
+          <h1
             className="text-center font-bold mb-6 text-gray-200"
             style={{ fontSize: '24px', marginBottom: '16px' }}
           >
