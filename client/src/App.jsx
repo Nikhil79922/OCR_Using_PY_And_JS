@@ -20,12 +20,13 @@ function App() {
     formData.append('file', file);
 
     try {
-      const response = await axios.post('http://localhost:5000/upload', formData, {
+      const response = await axios.post('http://localhost:3000/ocr', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
-      setExtractedData(response.data);
+      setExtractedData(response.data); // Store extracted data in 
+      console.log(response.data); // Store extracted data in 
     } catch (error) {
       console.error('Error uploading file:', error);
     }
@@ -44,19 +45,16 @@ function App() {
     const adjustHeight = () => {
       if (contentRef.current) {
         const height = contentRef.current.scrollHeight;
-        // Adding extra space to ensure all content fits
-        setContainerHeight(`${height + 120}px`); 
+        setContainerHeight(`${height + 120}px`); // Adding extra space to ensure all content fits
       } else {
         setContainerHeight('0px');
       }
     };
   
-    // Using a small delay to ensure rendering is complete
     const timeout = setTimeout(adjustHeight, 50);
   
     return () => clearTimeout(timeout);
   }, [extractedData]);
-
 
   // Copy extracted data to clipboard
   const copyToClipboard = () => {

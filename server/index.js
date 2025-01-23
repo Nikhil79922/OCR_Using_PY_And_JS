@@ -1,120 +1,120 @@
-const express = require('express');
-const multer = require('multer');
-const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
-const pdf = require('pdf-poppler');
-const sharp = require('sharp');
-const axios = require('axios');
-const FormData = require('form-data'); // Import form-data module
+const express = require("express");
+const multer = require("multer");
+const path = require("path");
+const { spawn } = require("child_process");
+const pdfPoppler = require("pdf-poppler");
+const sharp = require("sharp");
+const cors = require("cors");
 
-// Your OCR.space API key
-const apiKey = 'K81890360688957';
 
 const app = express();
-app.use(express.static('public'));
+
+// Enable CORS for all origins
 app.use(cors());
 
-// Configure multer to handle file uploads
 const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, './uploads');
-    },
-    filename: function (req, file, cb) {
-        cb(null, `${Date.now()}-${file.originalname}`);
-    }
+  destination: function (req, file, cb) {
+    cb(null, './uploads')
+  },
+  filename: function (req, file, cb) {
+  
+    cb(null, `${Date.now()}-${file.originalname}`)
+  }
+})
+
+const upload = multer({ storage: storage })
+
+app.use(express.json());
+
+// Convert PDF to image using pdf-poppler
+const convertPdfToImage = (filePath) => {
+  return new Promise((resolve, reject) => {
+    const outputPath = path.join(__dirname, "uploads", "output");
+    const options = {
+      format: "jpeg",
+      out_dir: path.dirname(outputPath),
+      out_prefix: path.basename(outputPath),
+      page: null, // Converts all pages of the PDF
+    };
+
+    pdfPoppler.convert(filePath, options)
+      .then(() => {
+        // We assume that the file generated is output-1.jpg (for the first page)
+        const imagePath = outputPath + "-1.jpg"; // Adjust this based on the generated files
+        resolve(imagePath); // Return the correct image path
+      })
+      .catch((err) => reject(err));
+  });
+};
+
+// Process the image using sharp (resize, etc.)
+const processImage = (imagePath) => {
+  return sharp(imagePath)
+    .resize(800) // Resize image to width of 800px
+    .toFile(imagePath.replace(".jpg", "_processed.jpg"));
+};
+
+// OCR using Python
+const performOcr = (imagePath, language = "eng") => {
+  return new Promise((resolve, reject) => {
+    const pythonProcess = spawn("python", ["ocr_service.py", imagePath, language]);
+    let result = "";
+    pythonProcess.stdout.on("data", (data) => {
+      result += data.toString();
+    });
+
+    pythonProcess.stderr.on("data", (data) => {
+      reject(`Python error: ${data.toString()}`);
+    });
+
+    pythonProcess.on("close", (code) => {
+      if (code === 0) {
+        resolve(result);
+      } else {
+        reject("OCR failed");
+      }
+    });
+  });
+};
+
+const cleanup = (filePath) => {
+  const fs = require('fs');
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);  // Delete the file after processing
+  }
+};
+
+app.post("/ocr", upload.single("file"), async (req, res) => {
+  const filePath = req.file.path; // Path to the uploaded PDF
+  const language = req.body.lang || "eng"; // Default to "eng" if no language is specified
+
+  try {
+    console.log("File uploaded at:", filePath);
+    // Step 1: Convert PDF to image
+    const imagePath = await convertPdfToImage(filePath);
+    console.log("PDF converted to image:", imagePath);
+
+    // Step 2: Process the image using sharp (resize, etc.)
+    await processImage(imagePath);
+    console.log("Image processed:", imagePath.replace(".jpg", "_processed.jpg"));
+
+    // Step 3: Perform OCR using Python
+    const ocrResult = await performOcr(imagePath.replace(".jpg", "_processed.jpg"), language);
+    console.log("OCR result:", ocrResult);
+
+    res.json({ text: ocrResult });
+
+    // Cleanup
+    cleanup(imagePath);  // Clean up the generated image after processing
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ error: "Failed to process the file" });
+  }
 });
-const upload = multer({ storage: storage });
 
-app.post('/upload', upload.single('file'), (req, res) => {
-    const filePath = req.file.path;
-    console.log(`Received file: ${filePath}`);
 
-    if (path.extname(filePath) === '.pdf') {
-        const pdfpath = path.join('uploads', path.basename(filePath));
-        const output_dir = "pdf_images";
 
-        if (!fs.existsSync(output_dir)) {
-            fs.mkdirSync(output_dir, { recursive: true });
-        }
-
-        const convert_Pdf_Into_Img = async (pdfpath, output_dir) => {
-            const opts = {
-                format: 'png',
-                out_dir: output_dir,
-                out_prefix: path.basename(pdfpath, path.extname(pdfpath)),
-            };
-
-            try {
-                await pdf.convert(pdfpath, opts);
-                const imageFiles = fs.readdirSync(output_dir).filter(file => file.endsWith('.png'));
-                console.log('Converted Images:', imageFiles);
-
-                const img_dir = imageFiles.slice(-1)[0]; // Get the last image
-                const imgPath = `./pdf_images/${img_dir}`;
-
-                const resizedImagePath = `./pdf_images/resized_${img_dir}`;
-                await sharp(imgPath).resize(1000, 1000, { fit: 'inside' }).toFile(resizedImagePath);
-
-                // Call the function to extract text from image after resizing
-                extractTextFromImage(resizedImagePath, res);
-                fs.unlinkSync(pdfpath);
-                fs.unlinkSync(imgPath);
-            } catch (err) {
-                console.error('Error during processing:', err);
-                res.status(500).send('Error during processing');
-            }
-        };
-
-        convert_Pdf_Into_Img(pdfpath, output_dir);
-    } else {
-        const resizedImagePath = `./uploads/resized_${path.basename(filePath)}`;
-        sharp(filePath).resize(1000, 1000, { fit: 'inside' })
-            .toFile(resizedImagePath)
-            .then(() => {
-                // Perform OCR on the resized image
-                extractTextFromImage(resizedImagePath, res);
-
-            })
-            .catch(err => {
-                console.error('Error during image resizing:', err);
-                res.status(500).send('Error during image resizing');
-            });
-    }
-});
-
-async function extractTextFromImage(imagePath, res) {
-    try {
-        const imageFile = fs.createReadStream(imagePath);
-
-        // Create form data and append necessary data
-        const formData = new FormData();
-        formData.append('apikey', apiKey);
-        formData.append('file', imageFile);
-        formData.append('filetype', 'PNG');
-
-        // Perform OCR request to OCR.space
-        const response = await axios.post('https://api.ocr.space/parse/image', formData, {
-            headers: {
-                ...formData.getHeaders(),
-            },
-        });
-
-        if (response.data.IsErroredOnProcessing) {
-            console.error('Error in OCR processing:', response.data.ErrorMessage);
-            res.status(500).send('Error in OCR processing');
-        } else {
-            const extractedText = response.data.ParsedResults[0].ParsedText;
-            console.log('Extracted Text:', extractedText);
-            res.json({ extractedText });
-        }
-    } catch (error) {
-        console.error('Error during OCR request:', error);
-        res.status(500).send('Error during OCR request');
-    }
-}
-// Start the server
-const port = 5000;
-app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
 });
