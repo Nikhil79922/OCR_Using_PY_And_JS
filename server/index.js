@@ -5,7 +5,7 @@ const { spawn } = require("child_process");
 const pdfPoppler = require("pdf-poppler");
 const sharp = require("sharp");
 const cors = require("cors");
-
+const fs = require("fs");
 
 const app = express();
 
@@ -17,7 +17,6 @@ const storage = multer.diskStorage({
     cb(null, './uploads')
   },
   filename: function (req, file, cb) {
-  
     cb(null, `${Date.now()}-${file.originalname}`)
   }
 })
@@ -77,8 +76,8 @@ const performOcr = (imagePath, language = "eng") => {
   });
 };
 
+// Cleanup function to remove files
 const cleanup = (filePath) => {
-  const fs = require('fs');
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);  // Delete the file after processing
   }
@@ -90,6 +89,7 @@ app.post("/ocr", upload.single("file"), async (req, res) => {
 
   try {
     console.log("File uploaded at:", filePath);
+    
     // Step 1: Convert PDF to image
     const imagePath = await convertPdfToImage(filePath);
     console.log("PDF converted to image:", imagePath);
@@ -105,14 +105,15 @@ app.post("/ocr", upload.single("file"), async (req, res) => {
     res.json({ text: ocrResult });
 
     // Cleanup
-    cleanup(imagePath);  // Clean up the generated image after processing
+    cleanup(filePath); // Clean up the uploaded PDF
+    cleanup(imagePath); // Clean up the generated image after processing
+    cleanup(imagePath.replace(".jpg", "_processed.jpg")); // Clean up the processed image after OCR
+
   } catch (error) {
     console.error("Error:", error);
     res.status(500).json({ error: "Failed to process the file" });
   }
 });
-
-
 
 const PORT = 3000;
 app.listen(PORT, () => {

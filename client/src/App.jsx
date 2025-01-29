@@ -76,7 +76,7 @@ function App() {
         {Object.keys(extractedData).map((key) => (
           <div key={key} style={{ marginBottom: '12px' }}>
             <strong style={{ color: '#ff5722' }}>{key}:</strong>
-            <p>{extractedData[key]}</p>
+            <p style={{ color: 'green', fontSize:"17px", fontWeight:"revert-layer" }}>{extractedData[key]}</p>
           </div>
         ))}
         <button
@@ -107,7 +107,7 @@ function App() {
 
   return (
     <div
-      className="min-h-screen bg-cover bg-center flex items-center justify-center"
+      className="min-h-screen bg-cover bg-center flex items-center bg-black justify-center"
       style={{
         backgroundImage: 'url("https://your-image-url.com/metal-background.jpg")', // Replace with your background image URL
         backgroundPosition: 'center',
